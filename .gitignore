@@ -1,0 +1,9 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+keys/platform.pk8
+keys/platform.x509.pem
+keys/platform.p12
+keys/platform.key.pem

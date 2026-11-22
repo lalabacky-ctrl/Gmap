@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Bản "hệ thống": chạy chung quyền với hệ thống (uid 1000) giống Sunray.
+  BẮT BUỘC ký bằng đúng khóa platform của đầu máy (Sunray dùng khóa thử AOSP,
+  SHA-1 27:19:6E:38:6B:87:5E:76:AD:F7:00:E7:EA:84:E4:C6:EE:E3:3D:FA), nếu không sẽ không cài được.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    android:sharedUserId="android.uid.system" />

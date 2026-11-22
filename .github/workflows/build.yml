@@ -1,0 +1,40 @@
+# Build APK trên GitHub (miễn phí): đẩy mã lên GitHub rồi vào tab Actions tải file APK.
+name: Build APK
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Tạo khóa platform (cho bản hệ thống)
+        continue-on-error: true
+        run: bash tools/tao-khoa-platform.sh tai
+
+      - name: Build
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleThuongRelease assembleHeThongRelease
+
+      - name: Gom file APK
+        run: |
+          mkdir -p out
+          cp app/build/outputs/apk/thuong/release/*.apk out/GMapsDongHo-thuong.apk
+          cp app/build/outputs/apk/heThong/release/*.apk out/GMapsDongHo-hethong.apk
+          # nếu tên file có "unsigned" là chưa ký khóa platform -> không cài được bản hệ thống
+          ls app/build/outputs/apk/heThong/release/
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GMapsDongHo-apk
+          path: out/*.apk

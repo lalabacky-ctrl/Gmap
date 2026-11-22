@@ -1,0 +1,85 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Khóa platform (bản "hệ thống"). Tạo bằng tools/tao-khoa-platform.sh
+def platformStore = rootProject.file('keys/platform.p12')
+
+android {
+    namespace 'vn.cockpit.gmaps'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'vn.cockpit.gmaps'
+        minSdk 24
+        // Giữ 28 giống Sunray: đầu máy ECARX chạy Android 9, và app được gọi thư viện hệ thống như Sunray.
+        targetSdk 28
+        versionCode 1
+        versionName '1.0'
+    }
+
+    signingConfigs {
+        // Khóa riêng cho bản thường (để bản sau cài đè được lên bản trước).
+        thuong {
+            storeFile rootProject.file('keys/thuong.p12')
+            storeType 'pkcs12'
+            storePassword 'android'
+            keyAlias 'thuong'
+            keyPassword 'android'
+        }
+        if (platformStore.exists()) {
+            platform {
+                storeFile platformStore
+                storeType 'pkcs12'
+                storePassword 'android'
+                keyAlias 'platform'
+                keyPassword 'android'
+            }
+        }
+    }
+
+    flavorDimensions 'kieu'
+    productFlavors {
+        // App thường: cài như app bình thường.
+        thuong {
+            dimension 'kieu'
+            signingConfig signingConfigs.thuong
+        }
+        // App hệ thống: sharedUserId = android.uid.system, ký bằng khóa platform giống Sunray.
+        heThong {
+            dimension 'kieu'
+            applicationIdSuffix '.hethong'
+            if (platformStore.exists()) {
+                signingConfig signingConfigs.platform
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+        disable 'ExpiredTargetSdkVersion', 'OldTargetApi', 'ProtectedPermissions', 'SetTextI18n',
+                'HardcodedText', 'UseSwitchCompatOrMaterialCode'
+    }
+}
+
+// Báo rõ khi build bản hệ thống mà chưa có khóa platform.
+tasks.configureEach { t ->
+    if (t.name == 'assembleHeThongRelease' && !platformStore.exists()) {
+        t.doFirst {
+            logger.warn('CHÚ Ý: chưa có keys/platform.p12 nên bản heThong KHÔNG được ký bằng khóa platform, ' +
+                    'sẽ không cài được. Chạy tools/tao-khoa-platform.sh trước.')
+        }
+    }
+}
