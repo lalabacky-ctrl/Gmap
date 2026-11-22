@@ -447,6 +447,7 @@ final class DimBridge {
     /** Ghi vào nhật ký danh sách lệnh thật của thư viện đồng hồ trên đầu máy này. */
     private static void dumpApi(Object dimObj, Object naviObj) {
         try {
+            AppLog.i("Thư viện đồng hồ nằm ở: " + naviObj.getClass().getClassLoader());
             AppLog.i("API DimInteraction (" + dimObj.getClass().getName() + "): " + methods(dimObj.getClass()));
             AppLog.i("API NaviInteraction (" + naviObj.getClass().getName() + "): " + methods(naviObj.getClass()));
             try {
