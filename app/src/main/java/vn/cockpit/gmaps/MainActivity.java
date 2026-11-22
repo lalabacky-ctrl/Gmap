@@ -123,6 +123,59 @@ public class MainActivity extends Activity {
         raw.addView(sendRaw);
         root.addView(raw);
 
+        // Lệnh menu của đồng hồ: chuyển chế độ dẫn đường / tab (thử nghiệm cho IHU689G)
+        TextView menuHelp = new TextView(this);
+        menuHelp.setText("Chế độ / tab của đồng hồ (thử nghiệm): nhập số rồi bấm. "
+                + "Thử lần lượt 0, 1, 2, 3... trong lúc đang Gửi thử, nhìn đồng hồ.");
+        menuHelp.setPadding(0, dp(8), 0, 0);
+        root.addView(menuHelp);
+        LinearLayout menuRow = new LinearLayout(this);
+        menuRow.setOrientation(LinearLayout.HORIZONTAL);
+        final EditText menuInput = new EditText(this);
+        menuInput.setHint("Số, ví dụ 1");
+        menuInput.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_SIGNED);
+        menuRow.addView(menuInput, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        final ClusterController.Result showResult = new ClusterController.Result() {
+            @Override public void done(String text) { toast(text); }
+        };
+        String[][] menuButtons = {
+                {"Chế độ DĐ", "switchNaviMode"},
+                {"Tab", "requestDimSwitchTabWindow"},
+        };
+        for (final String[] mb : menuButtons) {
+            Button mbtn = new Button(this);
+            mbtn.setText(mb[0]);
+            mbtn.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    try {
+                        long n = Long.parseLong(menuInput.getText().toString().trim());
+                        ClusterController.get(MainActivity.this).menuCall(mb[1], showResult, n);
+                    } catch (NumberFormatException e) {
+                        toast("Nhập một con số");
+                    }
+                }
+            });
+            menuRow.addView(mbtn);
+        }
+        root.addView(menuRow);
+        LinearLayout menuRow2 = new LinearLayout(this);
+        menuRow2.setOrientation(LinearLayout.HORIZONTAL);
+        String[][] menuButtons2 = {
+                {"Đọc chế độ", "getNaviMode"},
+                {"Báo IHU sẵn sàng", "notifyIHUReady"},
+        };
+        for (final String[] mb : menuButtons2) {
+            Button mbtn2 = new Button(this);
+            mbtn2.setText(mb[0]);
+            mbtn2.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    ClusterController.get(MainActivity.this).menuCall(mb[1], showResult);
+                }
+            });
+            menuRow2.addView(mbtn2, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        }
+        root.addView(menuRow2);
+
         button(root, "Xóa hiển thị trên đồng hồ ngay", new View.OnClickListener() {
             @Override public void onClick(View v) {
                 ClusterController.get(MainActivity.this).clearNow();

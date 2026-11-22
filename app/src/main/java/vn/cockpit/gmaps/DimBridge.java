@@ -439,6 +439,54 @@ final class DimBridge {
         }
     }
 
+    // ---------- DimMenuInteraction: chuyển chế độ / tab của đồng hồ ----------
+
+    private Object menu;
+
+    private Object menu() throws Exception {
+        if (menu == null && dim != null) {
+            menu = dim.getClass().getMethod("getDimMenuInteraction").invoke(dim);
+        }
+        return menu;
+    }
+
+    /**
+     * Gọi một lệnh của DimMenuInteraction theo tên, với các tham số số nguyên.
+     * Trả về chuỗi mô tả kết quả (để ghi Nhật ký và hiện lên màn hình).
+     */
+    synchronized String menuCall(String name, long... args) {
+        if (!ensure()) return "chưa kết nối được đồng hồ";
+        try {
+            Object m = menu();
+            if (m == null) return "đầu máy không có DimMenuInteraction";
+            Method found = null;
+            for (Method x : m.getClass().getMethods()) {
+                if (x.getName().equals(name) && x.getParameterTypes().length == args.length) {
+                    found = x;
+                    break;
+                }
+            }
+            if (found == null) return "không có lệnh " + name + " với " + args.length + " tham số";
+            Class<?>[] ps = found.getParameterTypes();
+            Object[] a = new Object[args.length];
+            for (int i = 0; i < args.length; i++) a[i] = coerce(args[i], ps[i]);
+            found.setAccessible(true);
+            Object r = found.invoke(m, a);
+            StringBuilder sb = new StringBuilder(name).append('(');
+            for (int i = 0; i < args.length; i++) {
+                if (i > 0) sb.append(", ");
+                sb.append(args[i]);
+            }
+            sb.append(") = ").append(valueToString(r));
+            AppLog.i("DIM menu: " + sb);
+            return sb.toString();
+        } catch (Throwable t) {
+            String e = name + " lỗi: " + describe(t);
+            AppLog.w("DIM menu: " + e, unwrap(t));
+            return e;
+        }
+    }
+
     /** Một số đầu máy cần báo "bắt đầu dẫn đường từng bước" (không có thì bỏ qua). */
     synchronized boolean turnByTurnStarted() {
         return call("notifyTurnByTurnStarted", new Class<?>[0]);
@@ -494,6 +542,15 @@ final class DimBridge {
             } catch (Throwable t) {
                 AppLog.i("DIM " + g + "(): " + describe(t));
             }
+        }
+        try {
+            Object mi = dimObj.getClass().getMethod("getDimMenuInteraction").invoke(dimObj);
+            if (mi != null) {
+                Object nm = mi.getClass().getMethod("getNaviMode").invoke(mi);
+                AppLog.i("DIM menu: getNaviMode() = " + valueToString(nm) + " (lúc mở app)");
+            }
+        } catch (Throwable t) {
+            AppLog.i("DIM menu: getNaviMode(): " + describe(t));
         }
         String[] groups = {"getDimMenuInteraction", "getVendorInteraction"};
         for (String g : groups) {

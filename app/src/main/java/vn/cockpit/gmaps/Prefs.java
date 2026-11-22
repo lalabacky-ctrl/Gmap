@@ -20,8 +20,8 @@ public final class Prefs {
     public static final String SEND_MODE = "kieu_gui";
     public static final String[] SEND_MODE_LABELS = {
             "A: như Sunray + lệnh riêng",
-            "B: không báo trạng thái, đặt lại thông tin 0 rồi 2",
-            "C: gửi thông tin trước, báo trạng thái sau",
+            "B: đặt lại trạng thái 0 rồi 2 + lệnh riêng",
+            "C: gửi thông tin trước, báo trạng thái sau + lệnh riêng",
             "D: như Sunray, tối giản",
     };
 

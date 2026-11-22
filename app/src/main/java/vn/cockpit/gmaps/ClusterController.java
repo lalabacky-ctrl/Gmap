@@ -163,6 +163,18 @@ final class ClusterController implements DimBridge.Callback {
     }
 
     /** Gửi thử một mã hướng rẽ bất kỳ trong 8 giây (để dò mã nào hiện hình gì). */
+    /** Gọi một lệnh menu của đồng hồ (chuyển chế độ / tab) và trả kết quả qua callback trên luồng chính. */
+    interface Result { void done(String text); }
+
+    void menuCall(final String name, final Result cb, final long... args) {
+        h.post(new Runnable() {
+            @Override public void run() {
+                String r = dim.menuCall(name, args);
+                if (cb != null) cb.done(r);
+            }
+        });
+    }
+
     void sendRawTurnId(final int id) {
         h.post(new Runnable() {
             @Override public void run() {
@@ -268,7 +280,7 @@ final class ClusterController implements DimBridge.Callback {
                 dim.notifyStatus(DimBridge.STATUS_NAVIGATING);
                 dim.turnByTurnStarted();
             }
-            if (mode == 0) dim.updateIndividual(info);
+            if (mode != 3) dim.updateIndividual(info);
             dim.updateDriveDirection(0);
             lastKey = key;
             lastSendAt = now;
@@ -290,7 +302,7 @@ final class ClusterController implements DimBridge.Callback {
         h.removeCallbacks(tick);
         if (started && dim.isConnected()) {
             dim.updateInfo(DimBridge.Info.idle());
-            if (Prefs.sendMode(app) == 0) dim.updateIndividual(DimBridge.Info.idle());
+            if (Prefs.sendMode(app) != 3) dim.updateIndividual(DimBridge.Info.idle());
             dim.turnByTurnStopped();
             dim.notifyStatus(DimBridge.STATUS_IDLE);
             dim.clearAddresses();
