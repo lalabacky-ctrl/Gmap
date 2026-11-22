@@ -35,6 +35,7 @@ final class ClusterController implements DimBridge.Callback {
     private int testIndex;
 
     private boolean started;       // đã báo đồng hồ "đang dẫn đường"
+    private boolean notifyAfterInfo; // kiểu C: báo trạng thái sau lần gửi thông tin đầu
     private String lastKey;
     private long lastSendAt;
     private String lastLogged = "";
@@ -212,12 +213,28 @@ final class ClusterController implements DimBridge.Callback {
             if (!dim.isLibraryMissing()) h.postDelayed(tick, RETRY_MS);
             return;
         }
+        int mode = Prefs.sendMode(app);
         if (!started) {
-            dim.notifyStatus(DimBridge.STATUS_NAVIGATING);
-            dim.turnByTurnStarted();
+            switch (mode) {
+                case 1: // B: không báo trạng thái; đặt lại thông tin về 0 để lần gửi 2 được coi là "đổi trạng thái"
+                    dim.updateInfo(DimBridge.Info.idle());
+                    break;
+                case 2: // C: đặt lại hết, gửi thông tin trước rồi mới báo trạng thái
+                    dim.notifyStatus(DimBridge.STATUS_IDLE);
+                    dim.updateInfo(DimBridge.Info.idle());
+                    notifyAfterInfo = true;
+                    break;
+                case 3: // D: đúng như Sunray, không lệnh riêng
+                    dim.notifyStatus(DimBridge.STATUS_NAVIGATING);
+                    break;
+                default: // A
+                    dim.notifyStatus(DimBridge.STATUS_NAVIGATING);
+                    dim.turnByTurnStarted();
+                    break;
+            }
             started = true;
             force = true;
-            AppLog.i("Đồng hồ: bắt đầu hiển thị dẫn đường");
+            AppLog.i("Đồng hồ: bắt đầu hiển thị dẫn đường, kiểu gửi " + Prefs.SEND_MODE_LABELS[mode]);
         }
 
         String full = "";
@@ -246,7 +263,12 @@ final class ClusterController implements DimBridge.Callback {
         long now = SystemClock.uptimeMillis();
         if (force || !key.equals(lastKey) || now - lastSendAt >= KEEPALIVE_MS) {
             boolean ok = dim.updateInfo(info);
-            dim.updateIndividual(info);
+            if (notifyAfterInfo) {
+                notifyAfterInfo = false;
+                dim.notifyStatus(DimBridge.STATUS_NAVIGATING);
+                dim.turnByTurnStarted();
+            }
+            if (mode == 0) dim.updateIndividual(info);
             dim.updateDriveDirection(0);
             lastKey = key;
             lastSendAt = now;
@@ -268,15 +290,26 @@ final class ClusterController implements DimBridge.Callback {
         h.removeCallbacks(tick);
         if (started && dim.isConnected()) {
             dim.updateInfo(DimBridge.Info.idle());
-            dim.updateIndividual(DimBridge.Info.idle());
+            if (Prefs.sendMode(app) == 0) dim.updateIndividual(DimBridge.Info.idle());
             dim.turnByTurnStopped();
             dim.notifyStatus(DimBridge.STATUS_IDLE);
             dim.clearAddresses();
             AppLog.i("Đồng hồ: tắt hiển thị (" + reason + ")");
         }
         started = false;
+        notifyAfterInfo = false;
         lastKey = null;
         lastLogged = "";
+    }
+
+    /** Đổi kiểu gửi: tắt hiển thị rồi gửi lại từ đầu theo kiểu mới. */
+    void restartDim() {
+        h.post(new Runnable() {
+            @Override public void run() {
+                stopDim("đổi kiểu gửi");
+                push(true);
+            }
+        });
     }
 
     @Override

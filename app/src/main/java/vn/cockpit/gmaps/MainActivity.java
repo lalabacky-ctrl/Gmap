@@ -33,6 +33,7 @@ public class MainActivity extends Activity {
     private final Handler h = new Handler(Looper.getMainLooper());
     private TextView status;
     private Button windowBtn;
+    private Button modeBtn;
 
     private final Runnable refresh = new Runnable() {
         @Override public void run() {
@@ -83,6 +84,16 @@ public class MainActivity extends Activity {
         });
 
         section(root, "Thử trên đồng hồ (không cần chạy xe)");
+        modeBtn = button(root, "", new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                int m = (Prefs.sendMode(MainActivity.this) + 1) % Prefs.SEND_MODE_LABELS.length;
+                Prefs.put(MainActivity.this, Prefs.SEND_MODE, m);
+                updateModeLabel();
+                ClusterController.get(MainActivity.this).restartDim();
+                toast("Kiểu gửi " + Prefs.SEND_MODE_LABELS[m]);
+            }
+        });
+        updateModeLabel();
         button(root, "Gửi thử các hướng rẽ (khoảng 25 giây)", new View.OnClickListener() {
             @Override public void onClick(View v) {
                 ClusterController.get(MainActivity.this).runTest();
@@ -314,6 +325,13 @@ public class MainActivity extends Activity {
         });
         root.addView(s, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
+    }
+
+    private void updateModeLabel() {
+        if (modeBtn != null) {
+            modeBtn.setText("Kiểu gửi lên đồng hồ (thử nghiệm): " + Prefs.SEND_MODE_LABELS[Prefs.sendMode(this)]
+                    + " (bấm để đổi)");
+        }
     }
 
     private Button button(LinearLayout root, String text, View.OnClickListener l) {

@@ -16,6 +16,15 @@ public final class Prefs {
 
     public static final int[] WINDOW_CHOICES = {0, 6, 10, 13, 20, -1};
 
+    /** Kiểu gửi lên đồng hồ (thử nghiệm cho đầu máy đời mới như IHU689G). */
+    public static final String SEND_MODE = "kieu_gui";
+    public static final String[] SEND_MODE_LABELS = {
+            "A: như Sunray + lệnh riêng",
+            "B: không báo trạng thái, đặt lại thông tin 0 rồi 2",
+            "C: gửi thông tin trước, báo trạng thái sau",
+            "D: như Sunray, tối giản",
+    };
+
     private Prefs() {}
 
     public static SharedPreferences sp(Context c) {
@@ -27,6 +36,10 @@ public final class Prefs {
     public static boolean stripDiacritics(Context c) { return sp(c).getBoolean(STRIP_DIACRITICS, true); }
     public static boolean useHeuristic(Context c) { return sp(c).getBoolean(USE_HEURISTIC, true); }
     public static int nameWindowSetting(Context c) { return sp(c).getInt(NAME_WINDOW, 0); }
+    public static int sendMode(Context c) {
+        int m = sp(c).getInt(SEND_MODE, 0);
+        return (m < 0 || m >= SEND_MODE_LABELS.length) ? 0 : m;
+    }
 
     public static void put(Context c, String key, boolean v) { sp(c).edit().putBoolean(key, v).apply(); }
     public static void put(Context c, String key, int v) { sp(c).edit().putInt(key, v).apply(); }
