@@ -244,6 +244,7 @@ final class ClusterController implements DimBridge.Callback {
                     dim.turnByTurnStarted();
                     break;
             }
+            dim.resetSent();
             started = true;
             force = true;
             AppLog.i("Đồng hồ: bắt đầu hiển thị dẫn đường, kiểu gửi " + Prefs.SEND_MODE_LABELS[mode]);
@@ -310,6 +311,7 @@ final class ClusterController implements DimBridge.Callback {
         }
         started = false;
         notifyAfterInfo = false;
+        dim.resetSent();
         lastKey = null;
         lastLogged = "";
     }

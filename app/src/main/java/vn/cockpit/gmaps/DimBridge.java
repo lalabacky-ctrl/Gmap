@@ -206,11 +206,13 @@ final class DimBridge {
      */
     synchronized void updateIndividual(Info info) {
         boolean active = info.status == STATUS_NAVIGATING;
-        call("updateTurnByTurnArrow", new Class<?>[]{int.class}, active ? info.turnId : 0);
-        call("updateDistanceToNextGuidancePoint", new Class<?>[]{int.class}, (int) (active ? info.distNextM : 0));
-        call("updateNextGuidancePointName", new Class<?>[]{String.class}, active ? info.name : "");
-        call("updateDistanceToDestination", new Class<?>[]{int.class}, (int) (active ? info.distDestM : 0));
-        call("updateETA", new Class<?>[]{int.class}, (int) (active ? info.etaSec : 0));
+        // Chỉ gửi giá trị nào đổi (thư viện ECARX ghi log mỗi lần gọi, gửi liên tục làm trôi logcat).
+        sendIfChanged("updateTurnByTurnArrow", int.class, active ? info.turnId : 0);
+        sendIfChanged("updateDistanceToNextGuidancePoint", int.class, (int) (active ? info.distNextM : 0));
+        sendIfChanged("updateNextGuidancePointName", String.class, active ? info.name : "");
+        sendIfChanged("updateDistanceToDestination", int.class, (int) (active ? info.distDestM : 0));
+        sendIfChanged("updateETA", int.class, (int) (active ? info.etaSec : 0));
+        if (!active) lastSent.clear();
         // Hình mũi tên: chỉ gửi khi đổi hình (ảnh gửi qua binder khá nặng).
         if (active && info.arrow != null && info.arrow != lastArrow) {
             if (call("updateTurnByTurnArrow", new Class<?>[]{android.graphics.Bitmap.class}, info.arrow)) {
@@ -393,6 +395,20 @@ final class DimBridge {
             }
         }
         return sb.append('}').toString();
+    }
+
+    private final java.util.Map<String, Object> lastSent = new java.util.HashMap<>();
+
+    private void sendIfChanged(String name, Class<?> type, Object value) {
+        Object prev = lastSent.get(name);
+        if (prev != null && prev.equals(value)) return;
+        if (call(name, new Class<?>[]{type}, value)) lastSent.put(name, value);
+    }
+
+    /** Quên các giá trị đã gửi (lần sau gửi lại hết). */
+    synchronized void resetSent() {
+        lastSent.clear();
+        lastArrow = null;
     }
 
     /** Đăng ký nhận phản hồi từ đồng hồ (để biết đồng hồ muốn gì). */
