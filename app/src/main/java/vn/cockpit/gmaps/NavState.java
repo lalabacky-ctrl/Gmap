@@ -9,6 +9,8 @@ final class NavState {
     int remainDistM = -1;
     int remainSec = -1;
     String road = "";
+    /** Hình mũi tên của Google Maps (có thể null). */
+    android.graphics.Bitmap arrow;
     /** Dùng khi gửi thử một mã hướng rẽ bất kỳ. */
     Integer rawTurnId;
 

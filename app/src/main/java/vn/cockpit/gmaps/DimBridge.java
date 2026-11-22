@@ -47,6 +47,8 @@ final class DimBridge {
         final long distNextM;
         final long distDestM;
         final long etaSec;
+        /** Hình mũi tên gửi kèm (có thể null). */
+        android.graphics.Bitmap arrow;
 
         Info(int status, int turnId, String name, long distNextM, long distDestM, long etaSec) {
             this.status = status;
@@ -69,6 +71,8 @@ final class DimBridge {
     private boolean watcherRegistered;
     private boolean apiDumped;
     private Object naviCallbackFor;
+    private android.graphics.Bitmap lastArrow;
+    private final Set<String> newStyleBroken = Collections.synchronizedSet(new HashSet<String>());
     private volatile boolean libraryMissing;
     private volatile String lastError = "";
     private final Set<String> loggedOnce = Collections.synchronizedSet(new HashSet<String>());
@@ -207,6 +211,188 @@ final class DimBridge {
         call("updateNextGuidancePointName", new Class<?>[]{String.class}, active ? info.name : "");
         call("updateDistanceToDestination", new Class<?>[]{int.class}, (int) (active ? info.distDestM : 0));
         call("updateETA", new Class<?>[]{int.class}, (int) (active ? info.etaSec : 0));
+        // Hình mũi tên: chỉ gửi khi đổi hình (ảnh gửi qua binder khá nặng).
+        if (active && info.arrow != null && info.arrow != lastArrow) {
+            if (call("updateTurnByTurnArrow", new Class<?>[]{android.graphics.Bitmap.class}, info.arrow)) {
+                lastArrow = info.arrow;
+            }
+        }
+        if (!active) lastArrow = null;
+        sendNewStyle(info);
+    }
+
+    // ---------- kiểu lệnh mới: updateNaviStatus(NaviStatus) / updateNaviInfo(NaviInfo) ----------
+
+    /**
+     * Đầu máy đời mới có thêm updateNaviStatus(NaviStatus) và updateNaviInfo(NaviInfo) dùng lớp dữ liệu
+     * cụ thể. Chưa biết cấu trúc lớp, nên ghi cấu trúc vào Nhật ký rồi điền theo tên trường/tên hàm.
+     */
+    private void sendNewStyle(Info info) {
+        Object target = navi;
+        if (target == null) return;
+        sendFilled(target, "updateNaviStatus", info);
+        sendFilled(target, "updateNaviInfo", info);
+    }
+
+    private void sendFilled(Object target, String method, Info info) {
+        if (newStyleBroken.contains(method)) return;
+        try {
+            Method m = null;
+            for (Method x : target.getClass().getMethods()) {
+                if (method.equals(x.getName()) && x.getParameterTypes().length == 1) {
+                    m = x;
+                    break;
+                }
+            }
+            if (m == null) {
+                newStyleBroken.add(method);
+                return;
+            }
+            Class<?> c = m.getParameterTypes()[0];
+            if (loggedOnce.add("struct:" + c.getName())) AppLog.i("Cấu trúc " + describeClass(c));
+            Object obj = build(c, info);
+            if (obj == null) {
+                if (loggedOnce.add("nobuild:" + method)) AppLog.i("DIM: chưa tạo được " + c.getSimpleName() + " cho " + method);
+                newStyleBroken.add(method);
+                return;
+            }
+            m.setAccessible(true);
+            m.invoke(target, obj);
+            if (loggedOnce.add("ok:" + method)) AppLog.i("DIM: lệnh " + method + " chạy được: " + dumpObject(obj));
+        } catch (Throwable t) {
+            newStyleBroken.add(method);
+            AppLog.w("DIM: " + method + " lỗi", unwrap(t));
+        }
+    }
+
+    private Object build(Class<?> c, Info info) throws Exception {
+        boolean active = info.status == STATUS_NAVIGATING;
+        if (c.isEnum()) {
+            Object[] cs = c.getEnumConstants();
+            if (cs == null || cs.length == 0) return null;
+            for (Object e : cs) {
+                String n = e.toString().toUpperCase(java.util.Locale.ROOT);
+                boolean stopLike = n.contains("IDLE") || n.contains("STOP") || n.contains("NONE") || n.contains("END");
+                if (active && !stopLike && (n.contains("NAVI") || n.contains("GUID") || n.contains("START") || n.contains("ACTIVE"))) return e;
+                if (!active && stopLike) return e;
+            }
+            return null;
+        }
+        Object obj = null;
+        for (java.lang.reflect.Constructor<?> k : c.getDeclaredConstructors()) {
+            Class<?>[] ps = k.getParameterTypes();
+            if (ps.length == 0) {
+                k.setAccessible(true);
+                obj = k.newInstance();
+                break;
+            }
+        }
+        if (obj == null) {
+            for (java.lang.reflect.Constructor<?> k : c.getDeclaredConstructors()) {
+                Class<?>[] ps = k.getParameterTypes();
+                if (ps.length == 1 && (ps[0] == int.class)) {
+                    k.setAccessible(true);
+                    obj = k.newInstance(info.status);
+                    break;
+                }
+            }
+        }
+        if (obj == null) return null;
+        // Điền bằng hàm set...
+        for (Method s : c.getMethods()) {
+            if (!s.getName().startsWith("set") || s.getParameterTypes().length != 1) continue;
+            Object v = valueFor(s.getName().substring(3), s.getParameterTypes()[0], info);
+            if (v == null) continue;
+            try {
+                s.invoke(obj, v);
+            } catch (Throwable ignored) {
+                // bỏ qua trường không điền được
+            }
+        }
+        // Điền thẳng vào trường (nếu không có hàm set)
+        for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+            if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+            Object v = valueFor(f.getName(), f.getType(), info);
+            if (v == null) continue;
+            try {
+                f.setAccessible(true);
+                f.set(obj, v);
+            } catch (Throwable ignored) {
+                // bỏ qua
+            }
+        }
+        return obj;
+    }
+
+    /** Đoán giá trị cho một trường theo tên. */
+    private static Object valueFor(String name, Class<?> t, Info info) {
+        String n = name.toLowerCase(java.util.Locale.ROOT);
+        boolean active = info.status == STATUS_NAVIGATING;
+        boolean str = t == String.class || t == CharSequence.class;
+        if (t == android.graphics.Bitmap.class) return (n.contains("icon") || n.contains("arrow") || n.contains("turn")) ? info.arrow : null;
+        if (str) {
+            if (n.contains("road") || n.contains("street") || n.contains("name") || n.contains("guid")) return active ? info.name : "";
+            return null;
+        }
+        if (!(t.isPrimitive() || Number.class.isAssignableFrom(t) || t == Boolean.class)) return null;
+        if (n.contains("status") || n.contains("state")) return coerce(info.status, t);
+        if (n.contains("svg")) return null;
+        if (n.contains("turn") || n.contains("icon") || n.contains("arrow") || n.contains("maneuver")) {
+            return coerce(active ? info.turnId : 0, t);
+        }
+        if (n.contains("dist") || n.contains("mileage")) {
+            if (n.contains("dest") || n.contains("remain") || n.contains("total") || n.contains("all")) {
+                return coerce(active ? info.distDestM : 0, t);
+            }
+            return coerce(active ? info.distNextM : 0, t);
+        }
+        if (n.equals("eta") || n.contains("time") || n.contains("eta")) return coerce(active ? info.etaSec : 0, t);
+        return null;
+    }
+
+    private static String describeClass(Class<?> c) {
+        StringBuilder sb = new StringBuilder(c.getName());
+        if (c.isEnum()) {
+            sb.append(" enum {");
+            Object[] cs = c.getEnumConstants();
+            if (cs != null) for (Object e : cs) sb.append(e).append(", ");
+            return sb.append('}').toString();
+        }
+        sb.append(" | khởi tạo: ");
+        for (java.lang.reflect.Constructor<?> k : c.getDeclaredConstructors()) {
+            sb.append('(');
+            Class<?>[] ps = k.getParameterTypes();
+            for (int i = 0; i < ps.length; i++) {
+                if (i > 0) sb.append(',');
+                sb.append(ps[i].getSimpleName());
+            }
+            sb.append(") ");
+        }
+        sb.append("| trường: ");
+        for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+            if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+            sb.append(f.getType().getSimpleName()).append(' ').append(f.getName()).append("; ");
+        }
+        sb.append("| hàm: ").append(methods(c));
+        return sb.toString();
+    }
+
+    private static String dumpObject(Object o) {
+        if (o == null) return "null";
+        if (o.getClass().isEnum()) return o.toString();
+        StringBuilder sb = new StringBuilder(o.getClass().getSimpleName()).append('{');
+        for (java.lang.reflect.Field f : o.getClass().getDeclaredFields()) {
+            if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+            try {
+                f.setAccessible(true);
+                Object v = f.get(o);
+                if (v instanceof android.graphics.Bitmap) v = "Bitmap";
+                sb.append(f.getName()).append('=').append(v).append(", ");
+            } catch (Throwable ignored) {
+                // bỏ qua
+            }
+        }
+        return sb.append('}').toString();
     }
 
     /** Đăng ký nhận phản hồi từ đồng hồ (để biết đồng hồ muốn gì). */

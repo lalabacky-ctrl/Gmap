@@ -213,6 +213,7 @@ final class ClusterController implements DimBridge.Callback {
         long distDest = s.remainDistM >= 0 ? Math.max(s.remainDistM, 1) : 0;
         DimBridge.Info info = new DimBridge.Info(DimBridge.STATUS_NAVIGATING, s.turnId(), name,
                 Math.max(s.distM, 0), distDest, Math.max(s.remainSec, 0));
+        info.arrow = s.arrow != null ? s.arrow : ArrowArt.get(s.maneuver);
 
         String key = info.turnId + "|" + info.distNextM + "|" + info.distDestM + "|" + info.etaSec + "|" + name;
         long now = SystemClock.uptimeMillis();

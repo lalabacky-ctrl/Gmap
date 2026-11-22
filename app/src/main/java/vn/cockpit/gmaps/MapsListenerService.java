@@ -218,6 +218,7 @@ public class MapsListenerService extends NotificationListenerService {
         s.remainDistM = r.remainDistM;
         s.remainSec = r.remainSec;
         s.road = r.road;
+        s.arrow = bmp;
         ClusterController.get(this).onMapsUpdate(s);
     }
 
