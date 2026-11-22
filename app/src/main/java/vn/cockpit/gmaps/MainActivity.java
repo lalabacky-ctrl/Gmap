@@ -129,7 +129,11 @@ public class MainActivity extends Activity {
         section(root, "Khác");
         button(root, "Mở Google Maps", new View.OnClickListener() {
             @Override public void onClick(View v) {
-                Intent i = getPackageManager().getLaunchIntentForPackage(MapsListenerService.MAPS_PKG);
+                Intent i = null;
+                for (String pkg : MapsListenerService.KNOWN_MAPS_PKGS) {
+                    i = getPackageManager().getLaunchIntentForPackage(pkg);
+                    if (i != null) break;
+                }
                 if (i == null) toast("Đầu máy chưa cài Google Maps");
                 else startActivity(i);
             }

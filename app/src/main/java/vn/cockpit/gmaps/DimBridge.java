@@ -67,6 +67,7 @@ final class DimBridge {
     private Object dim;
     private volatile Object navi;
     private boolean watcherRegistered;
+    private boolean apiDumped;
     private volatile boolean libraryMissing;
     private volatile String lastError = "";
     private final Set<String> loggedOnce = Collections.synchronizedSet(new HashSet<String>());
@@ -174,6 +175,10 @@ final class DimBridge {
         Object n = m.invoke(dim);
         if (n != null && navi == null) {
             AppLog.i("DIM: đã có NaviInteraction (" + n.getClass().getName() + ")");
+            if (!apiDumped) {
+                apiDumped = true;
+                dumpApi(dim, n);
+            }
         }
         navi = n;
         if (n != null) lastError = "";
@@ -187,6 +192,43 @@ final class DimBridge {
 
     synchronized boolean updateDriveDirection(int dir) {
         return call("updateDriveDirection", new Class<?>[]{int.class}, dir);
+    }
+
+    /** Một số đầu máy cần báo "bắt đầu dẫn đường từng bước" (không có thì bỏ qua). */
+    synchronized boolean turnByTurnStarted() {
+        return call("notifyTurnByTurnStarted", new Class<?>[0]);
+    }
+
+    /** Ghi vào nhật ký danh sách lệnh thật của thư viện đồng hồ trên đầu máy này. */
+    private static void dumpApi(Object dimObj, Object naviObj) {
+        try {
+            AppLog.i("API DimInteraction (" + dimObj.getClass().getName() + "): " + methods(dimObj.getClass()));
+            AppLog.i("API NaviInteraction (" + naviObj.getClass().getName() + "): " + methods(naviObj.getClass()));
+            try {
+                AppLog.i("API INavigationInfo: " + methods(Class.forName(CLS_INFO)));
+            } catch (Throwable t) {
+                AppLog.i("API INavigationInfo: không tìm thấy lớp " + CLS_INFO);
+            }
+        } catch (Throwable t) {
+            AppLog.w("DIM: không liệt kê được API", t);
+        }
+    }
+
+    private static String methods(Class<?> c) {
+        StringBuilder sb = new StringBuilder();
+        java.util.TreeSet<String> seen = new java.util.TreeSet<>();
+        for (Method m : c.getMethods()) {
+            if (m.getDeclaringClass() == Object.class) continue;
+            StringBuilder one = new StringBuilder(m.getName()).append('(');
+            Class<?>[] ps = m.getParameterTypes();
+            for (int i = 0; i < ps.length; i++) {
+                if (i > 0) one.append(',');
+                one.append(ps[i].getSimpleName());
+            }
+            seen.add(one.append(')').toString());
+        }
+        for (String x : seen) sb.append(x).append("; ");
+        return sb.toString();
     }
 
     synchronized boolean turnByTurnStopped() {
@@ -263,6 +305,15 @@ final class DimBridge {
             String n = m.getName();
             Class<?> rt = m.getReturnType();
             boolean active = info.status == STATUS_NAVIGATING;
+            Object v = answer(n, rt, active, proxy, m, args);
+            if (!"toString".equals(n) && !"hashCode".equals(n) && !"equals".equals(n)
+                    && loggedOnce.add("get:" + n)) {
+                AppLog.i("DIM đọc: " + n + "() = " + v);
+            }
+            return v;
+        }
+
+        private Object answer(String n, Class<?> rt, boolean active, Object proxy, Method m, Object[] args) {
             switch (n) {
                 case "toString":
                     return "GMapsNavInfo{status=" + info.status + ", turn=" + info.turnId + "}";
@@ -290,10 +341,7 @@ final class DimBridge {
                 case "getLaneInfo":
                     return rt.isArray() ? Array.newInstance(rt.getComponentType(), 0) : null;
                 default:
-                    // không khóa ở đây: thư viện có thể gọi từ luồng khác
-                    if (loggedOnce.add("info:" + n)) {
-                        AppLog.i("DIM hỏi thêm: " + n + "() -> trả giá trị mặc định");
-                    }
+                    // lệnh chưa biết: trả giá trị mặc định (dòng "DIM đọc" sẽ ghi lại tên lệnh)
                     return defaultFor(rt);
             }
         }

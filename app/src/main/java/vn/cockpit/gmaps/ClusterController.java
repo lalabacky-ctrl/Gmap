@@ -187,6 +187,7 @@ final class ClusterController implements DimBridge.Callback {
         }
         if (!started) {
             dim.notifyStatus(DimBridge.STATUS_NAVIGATING);
+            dim.turnByTurnStarted();
             started = true;
             force = true;
             AppLog.i("Đồng hồ: bắt đầu hiển thị dẫn đường");

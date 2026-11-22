@@ -20,6 +20,20 @@ import android.service.notification.StatusBarNotification;
  */
 public class MapsListenerService extends NotificationListenerService {
     static final String MAPS_PKG = "com.google.android.apps.maps";
+    /** Các bản Google Maps đã biết: bản gốc và bản mod (Morphe, ReVanced...). */
+    static final String[] KNOWN_MAPS_PKGS = {
+            MAPS_PKG,
+            "app.morphe.android.apps.maps",
+            "app.revanced.android.apps.maps",
+    };
+
+    /** Gói này có phải Google Maps (bản gốc hoặc bản mod) không. */
+    static boolean isMapsPackage(String pkg) {
+        if (pkg == null) return false;
+        for (String k : KNOWN_MAPS_PKGS) if (k.equals(pkg)) return true;
+        // bản mod khác thường giữ đuôi ".apps.maps"
+        return pkg.endsWith(".apps.maps");
+    }
 
     static volatile boolean sConnected;
     /** Nội dung thông báo Google Maps gần nhất (để xem trong mục chẩn đoán). */
@@ -58,7 +72,7 @@ public class MapsListenerService extends NotificationListenerService {
 
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
-        if (sbn == null || !MAPS_PKG.equals(sbn.getPackageName())) return;
+        if (sbn == null || !isMapsPackage(sbn.getPackageName())) return;
         try {
             handle(sbn, true);
         } catch (Throwable t) {
@@ -68,7 +82,7 @@ public class MapsListenerService extends NotificationListenerService {
 
     @Override
     public void onNotificationRemoved(StatusBarNotification sbn) {
-        if (sbn == null || !MAPS_PKG.equals(sbn.getPackageName())) return;
+        if (sbn == null || !isMapsPackage(sbn.getPackageName())) return;
         // Google Maps hay gỡ thông báo cũ rồi đăng thông báo mới khi đổi bước,
         // nên chờ một chút rồi mới kiểm tra còn dẫn đường không.
         main.removeCallbacks(checkGone);
@@ -86,7 +100,7 @@ public class MapsListenerService extends NotificationListenerService {
         StatusBarNotification latest = null;
         if (all != null) {
             for (StatusBarNotification sbn : all) {
-                if (!MAPS_PKG.equals(sbn.getPackageName())) continue;
+                if (!isMapsPackage(sbn.getPackageName())) continue;
                 if (!isNavigation(sbn.getNotification())) continue;
                 if (latest == null || sbn.getPostTime() > latest.getPostTime()) latest = sbn;
             }
