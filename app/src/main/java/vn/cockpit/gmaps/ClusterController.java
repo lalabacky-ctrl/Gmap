@@ -93,8 +93,35 @@ final class ClusterController implements DimBridge.Callback {
     /** Kết nối sẵn tới đồng hồ (gọi khi mở app / khi dịch vụ chạy). */
     void connect() {
         h.post(new Runnable() {
-            @Override public void run() { dim.ensure(); }
+            @Override public void run() {
+                logDisplaysOnce();
+                dim.ensure();
+            }
         });
+    }
+
+    private boolean displaysLogged;
+
+    /** Ghi danh sách màn hình đầu máy thấy được (xem đồng hồ có phải là một màn hình Android không). */
+    private void logDisplaysOnce() {
+        if (displaysLogged) return;
+        displaysLogged = true;
+        try {
+            android.hardware.display.DisplayManager dm =
+                    (android.hardware.display.DisplayManager) app.getSystemService(Context.DISPLAY_SERVICE);
+            if (dm == null) return;
+            StringBuilder sb = new StringBuilder();
+            for (android.view.Display d : dm.getDisplays()) {
+                android.graphics.Point p = new android.graphics.Point();
+                d.getRealSize(p);
+                sb.append("#").append(d.getDisplayId()).append(' ').append(d.getName())
+                        .append(' ').append(p.x).append('x').append(p.y)
+                        .append(" flags=0x").append(Integer.toHexString(d.getFlags())).append("; ");
+            }
+            AppLog.i("Màn hình: " + sb);
+        } catch (Throwable t) {
+            AppLog.w("Không liệt kê được màn hình", t);
+        }
     }
 
     /** Xóa hiển thị trên đồng hồ ngay (bước kế tiếp từ Google Maps sẽ hiện lại nếu còn bật). */

@@ -458,6 +458,70 @@ final class DimBridge {
         } catch (Throwable t) {
             AppLog.w("DIM: không liệt kê được API", t);
         }
+        dumpFeatures(dimObj);
+    }
+
+    /** Ghi các cờ tính năng của đầu máy và các nhóm lệnh khác của đồng hồ (để biết đồng hồ có bật dẫn đường không). */
+    private static void dumpFeatures(Object dimObj) {
+        // 1. Cờ tính năng của nền tảng ECARX
+        try {
+            Class<?> pf = Class.forName("com.ecarx.xui.adaptapi.util.PlatformFeature");
+            StringBuilder sb = new StringBuilder();
+            java.util.TreeMap<String, String> vals = new java.util.TreeMap<>();
+            for (Method m : pf.getMethods()) {
+                if (!java.lang.reflect.Modifier.isStatic(m.getModifiers()) || m.getParameterTypes().length != 0) continue;
+                Class<?> rt = m.getReturnType();
+                if (!(rt.isPrimitive() || rt == String.class || Number.class.isAssignableFrom(rt) || rt == Boolean.class)) continue;
+                if (rt == void.class) continue;
+                try {
+                    vals.put(m.getName(), String.valueOf(m.invoke(null)));
+                } catch (Throwable t) {
+                    vals.put(m.getName(), "lỗi");
+                }
+            }
+            for (java.util.Map.Entry<String, String> e : vals.entrySet()) sb.append(e.getKey()).append('=').append(e.getValue()).append("; ");
+            AppLog.i("Cờ tính năng (PlatformFeature): " + sb);
+        } catch (Throwable t) {
+            AppLog.i("Không đọc được PlatformFeature: " + describe(t));
+        }
+        // 2. Các nhóm lệnh khác của đồng hồ (menu, vendor...) và giá trị đọc được
+        if (dimObj == null) return;
+        String[] getters = {"getShowPresentationOption", "getSupportedRankingType"};
+        for (String g : getters) {
+            try {
+                Object v = dimObj.getClass().getMethod(g).invoke(dimObj);
+                AppLog.i("DIM " + g + "() = " + valueToString(v));
+            } catch (Throwable t) {
+                AppLog.i("DIM " + g + "(): " + describe(t));
+            }
+        }
+        String[] groups = {"getDimMenuInteraction", "getVendorInteraction"};
+        for (String g : groups) {
+            try {
+                Object o = dimObj.getClass().getMethod(g).invoke(dimObj);
+                if (o == null) {
+                    AppLog.i("DIM " + g + "() = null");
+                    continue;
+                }
+                AppLog.i("API " + g + " (" + o.getClass().getName() + "): " + methods(o.getClass()));
+            } catch (Throwable t) {
+                AppLog.i("DIM " + g + "(): " + describe(t));
+            }
+        }
+    }
+
+    private static String valueToString(Object v) {
+        if (v == null) return "null";
+        if (v.getClass().isArray()) {
+            StringBuilder sb = new StringBuilder("[");
+            int n = Array.getLength(v);
+            for (int i = 0; i < n; i++) {
+                if (i > 0) sb.append(", ");
+                sb.append(Array.get(v, i));
+            }
+            return sb.append(']').toString();
+        }
+        return String.valueOf(v);
     }
 
     private static String methods(Class<?> c) {
