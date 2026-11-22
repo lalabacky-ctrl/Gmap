@@ -68,6 +68,7 @@ final class DimBridge {
     private volatile Object navi;
     private boolean watcherRegistered;
     private boolean apiDumped;
+    private Object naviCallbackFor;
     private volatile boolean libraryMissing;
     private volatile String lastError = "";
     private final Set<String> loggedOnce = Collections.synchronizedSet(new HashSet<String>());
@@ -179,6 +180,7 @@ final class DimBridge {
                 apiDumped = true;
                 dumpApi(dim, n);
             }
+            registerNaviCallback(n);
         }
         navi = n;
         if (n != null) lastError = "";
@@ -192,6 +194,63 @@ final class DimBridge {
 
     synchronized boolean updateDriveDirection(int dir) {
         return call("updateDriveDirection", new Class<?>[]{int.class}, dir);
+    }
+
+    /**
+     * Gửi thêm từng giá trị bằng lệnh riêng (đầu máy đời mới như IHU689G có các lệnh này).
+     * Lệnh nào đầu máy không có thì bỏ qua.
+     */
+    synchronized void updateIndividual(Info info) {
+        boolean active = info.status == STATUS_NAVIGATING;
+        call("updateTurnByTurnArrow", new Class<?>[]{int.class}, active ? info.turnId : 0);
+        call("updateDistanceToNextGuidancePoint", new Class<?>[]{int.class}, (int) (active ? info.distNextM : 0));
+        call("updateNextGuidancePointName", new Class<?>[]{String.class}, active ? info.name : "");
+        call("updateDistanceToDestination", new Class<?>[]{int.class}, (int) (active ? info.distDestM : 0));
+        call("updateETA", new Class<?>[]{int.class}, (int) (active ? info.etaSec : 0));
+    }
+
+    /** Đăng ký nhận phản hồi từ đồng hồ (để biết đồng hồ muốn gì). */
+    private void registerNaviCallback(Object n) {
+        if (n == null || naviCallbackFor == n) return;
+        try {
+            Method reg = null;
+            for (Method m : n.getClass().getMethods()) {
+                if ("registerNavigationInteractionCallback".equals(m.getName())
+                        && m.getParameterTypes().length == 1
+                        && m.getParameterTypes()[0].isInterface()) {
+                    reg = m;
+                    break;
+                }
+            }
+            if (reg == null) return;
+            Class<?> cb = reg.getParameterTypes()[0];
+            Object proxy = Proxy.newProxyInstance(cb.getClassLoader(), new Class<?>[]{cb},
+                    new InvocationHandler() {
+                        @Override
+                        public Object invoke(Object p, Method m, Object[] args) {
+                            String name = m.getName();
+                            if ("hashCode".equals(name) || "equals".equals(name) || "toString".equals(name)) {
+                                return objectMethod(p, m, args, "NaviCallback");
+                            }
+                            StringBuilder a = new StringBuilder();
+                            if (args != null) {
+                                for (int i = 0; i < args.length; i++) {
+                                    if (i > 0) a.append(", ");
+                                    a.append(args[i]);
+                                }
+                            }
+                            String line = "Đồng hồ báo: " + name + "(" + a + ")";
+                            if (loggedOnce.size() < 2000 && loggedOnce.add("cb:" + line)) AppLog.i(line);
+                            return defaultFor(m.getReturnType());
+                        }
+                    });
+            reg.setAccessible(true);
+            reg.invoke(n, proxy);
+            naviCallbackFor = n;
+            AppLog.i("DIM: đã đăng ký nhận phản hồi đồng hồ (" + cb.getName() + ")");
+        } catch (Throwable t) {
+            AppLog.w("DIM: không đăng ký được phản hồi đồng hồ", unwrap(t));
+        }
     }
 
     /** Một số đầu máy cần báo "bắt đầu dẫn đường từng bước" (không có thì bỏ qua). */
@@ -259,6 +318,7 @@ final class DimBridge {
         try {
             Method m = resolve(target, CLS_NAVI, name, types);
             m.invoke(target, args);
+            if (loggedOnce.add("ok:" + name)) AppLog.i("DIM: lệnh " + name + " chạy được");
             return true;
         } catch (NoSuchMethodException e) {
             if (loggedOnce.add("nsm:" + name)) AppLog.i("DIM: đầu máy không có lệnh " + name);

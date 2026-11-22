@@ -218,6 +218,7 @@ final class ClusterController implements DimBridge.Callback {
         long now = SystemClock.uptimeMillis();
         if (force || !key.equals(lastKey) || now - lastSendAt >= KEEPALIVE_MS) {
             boolean ok = dim.updateInfo(info);
+            dim.updateIndividual(info);
             dim.updateDriveDirection(0);
             lastKey = key;
             lastSendAt = now;
@@ -239,6 +240,7 @@ final class ClusterController implements DimBridge.Callback {
         h.removeCallbacks(tick);
         if (started && dim.isConnected()) {
             dim.updateInfo(DimBridge.Info.idle());
+            dim.updateIndividual(DimBridge.Info.idle());
             dim.turnByTurnStopped();
             dim.notifyStatus(DimBridge.STATUS_IDLE);
             dim.clearAddresses();
